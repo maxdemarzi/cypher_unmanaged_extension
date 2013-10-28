@@ -89,7 +89,7 @@ public class MyService {
         }
 
         for ( Node friend : friends ){
-            for (Relationship otherRelationship : friend.getRelationships(FRIENDS, Direction.OUTGOING) ){
+            for (Relationship otherRelationship : friend.getRelationships(FRIENDS, Direction.BOTH) ){
                 Node fof = otherRelationship.getOtherNode(friend);
                 if (!user.equals(fof) && !friends.contains(fof)) {
                     AtomicInteger atomicInteger = fofs.get(fof);
