@@ -1,12 +1,13 @@
-Viadeo 
-======
-
+Cypher Translation
+==================
 
 
 Unmanaged Extension
 -------------------
 
-Unmanaged Extension to recommend people to users.
+Unmanaged Extension to translate Cypher to Java
+
+
 
 
 Performance Tests
