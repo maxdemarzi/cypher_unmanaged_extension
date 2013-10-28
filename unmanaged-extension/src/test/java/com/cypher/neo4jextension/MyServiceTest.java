@@ -106,6 +106,14 @@ public class MyServiceTest {
         assertEquals(expected, actual);
     }
 
+    @Test
+    public void shouldFail2GetFofs() throws IOException {
+        Response response = service.getFofs("Z", db);
+        List actual = objectMapper.readValue((String) response.getEntity(), List.class);
+        List<HashMap<String, Object>> expected = Arrays.asList();
+        assertEquals(expected, actual);
+    }
+
     static HashMap<String, Object> entryOne = new HashMap<String, Object>(){{
         put("friend_count",2);
         put("fof", new HashMap<String, Object>(){{

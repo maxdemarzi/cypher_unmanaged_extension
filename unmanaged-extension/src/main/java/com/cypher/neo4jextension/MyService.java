@@ -83,26 +83,27 @@ public class MyService {
     private void findFofs(HashMap<Node, AtomicInteger> fofs, Node user) {
         List<Node> friends = new ArrayList<Node>();
 
-        for ( Relationship relationship : user.getRelationships(FRIENDS, Direction.BOTH) ){
-            Node friend = relationship.getOtherNode(user);
-            friends.add(friend);
-        }
+        if (user != null){
+            for ( Relationship relationship : user.getRelationships(FRIENDS, Direction.BOTH) ){
+                Node friend = relationship.getOtherNode(user);
+                friends.add(friend);
+            }
 
-        for ( Node friend : friends ){
-            for (Relationship otherRelationship : friend.getRelationships(FRIENDS, Direction.BOTH) ){
-                Node fof = otherRelationship.getOtherNode(friend);
-                if (!user.equals(fof) && !friends.contains(fof)) {
-                    AtomicInteger atomicInteger = fofs.get(fof);
-                    if (atomicInteger == null) {
-                        fofs.put(fof, new AtomicInteger(1));
-                    } else {
-                        atomicInteger.incrementAndGet();
+            for ( Node friend : friends ){
+                for (Relationship otherRelationship : friend.getRelationships(FRIENDS, Direction.BOTH) ){
+                    Node fof = otherRelationship.getOtherNode(friend);
+                    if (!user.equals(fof) && !friends.contains(fof)) {
+                        AtomicInteger atomicInteger = fofs.get(fof);
+                        if (atomicInteger == null) {
+                            fofs.put(fof, new AtomicInteger(1));
+                        } else {
+                            atomicInteger.incrementAndGet();
+                        }
                     }
                 }
             }
         }
     }
-
     private List<Entry<Node, AtomicInteger>> orderFofs(HashMap<Node, AtomicInteger> fofs) {
         List<Entry<Node, AtomicInteger>> fofList = new ArrayList<Entry<Node, AtomicInteger>>(fofs.entrySet());
         Collections.sort(fofList, new Comparator<Entry<Node, AtomicInteger>>() {
