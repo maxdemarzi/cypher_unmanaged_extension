@@ -25,9 +25,12 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import com.algolia.search.saas.*;
 
+
+
+
 @Path("/import_helper")
 public class MyService {
-    APIClient client = new APIClient("YourApplicationID", "YourAPIKey");
+    APIClient client = new APIClient("YourApplicationID", "34c7f1dc93e0480caf08b95c98fc18b");
 
     @GET
     @Path("/warmup")
@@ -46,10 +49,15 @@ public class MyService {
         return "Warmed up and ready to go!";
     }
 
+    public enum OrgRelationshipTypes implements RelationshipType
+    {
+        ORGANIZATION_IN_MARKET, HAS_HEADQUARTERS
+    }
+
+
     @GET
     @Path("/seed_algolia_orgs")
     public String seedAlgoliaOrgs(@Context GraphDatabaseService db) {
-
         ReadableIndex<Node> nodeAutoIndex = db.index().getNodeAutoIndexer().getAutoIndex();
         Index index = client.initIndex("organization_development");
         List<JSONObject> algolia_objects = new ArrayList<JSONObject>();
@@ -57,19 +65,19 @@ public class MyService {
             ArrayList<String> market_names = new ArrayList<String>();
             String market_names_flat = null, location = null;
             Integer n_relationships;
-            Iterable<Relationship> markets  = org.getRelationships("organization_in_market");
+            Iterable<Relationship> markets  = org.getRelationships(OrgRelationshipTypes.ORGANIZATION_IN_MARKET);
             if (markets != null && markets.iterator().hasNext()) {
                 market_names_flat = "";
                 while (markets.iterator().hasNext()) {
-                    market_names_flat += markets.iterator().next().getEndNode().getProperty('name');
+                    market_names_flat += markets.iterator().next().getEndNode().getProperty("name");
                     if (markets.iterator().hasNext()) market_names_flat += ",";
                 }
             }
-            Iterable<Relationship> headquarters = org.getRelationships("has_headquarters");
+            Iterable<Relationship> headquarters = org.getRelationships(OrgRelationshipTypes.HAS_HEADQUARTERS);
             if (headquarters != null && headquarters.iterator().hasNext())
                 location = (String) headquarters.iterator().next().getEndNode().getProperty("full_name");
 
-            n_relationships = Array.getLength(n.getRelationships);
+            n_relationships = Array.getLength(org.getRelationships());
 
             JSONObject algolia_obj = new JSONObject();
             try {
