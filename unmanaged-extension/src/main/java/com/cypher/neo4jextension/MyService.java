@@ -8,6 +8,7 @@ import org.neo4j.graphdb.Node;
 import org.neo4j.graphdb.index.IndexHits;
 import org.neo4j.kernel.EmbeddedGraphDatabase;
 import org.neo4j.tooling.GlobalGraphOperations;
+import scala.util.parsing.json.JSONObject;
 
 import javax.ws.rs.GET;
 import javax.ws.rs.Path;
@@ -15,21 +16,14 @@ import javax.ws.rs.PathParam;
 import javax.ws.rs.core.Context;
 import javax.ws.rs.core.Response;
 import java.io.IOException;
+import java.lang.reflect.Array;
 import java.util.*;
 import java.util.Map.Entry;
 import java.util.concurrent.atomic.AtomicInteger;
 
-@Path("/service")
+@Path("/import_helper")
 public class MyService {
-
-    ObjectMapper objectMapper = new ObjectMapper();
-    private static final RelationshipType FRIENDS = DynamicRelationshipType.withName("FRIENDS");
-
-    @GET
-    @Path("/helloworld")
-    public String helloWorld() {
-        return "Hello World!";
-    }
+    APIClient client = new APIClient("YourApplicationID", "YourAPIKey");
 
     @GET
     @Path("/warmup")
@@ -41,7 +35,7 @@ public class MyService {
                 start = relationship.getStartNode();
             }
         }
-        for ( Relationship r : GlobalGraphOperations.at(db).getAllRelationships() ) {
+        for ( Relationship r : GlobalGraphOperations.at( db ).getAllRelationships() ) {
             r.getPropertyKeys();
             start = r.getStartNode();
         }
@@ -49,90 +43,51 @@ public class MyService {
     }
 
     @GET
-    @Path("/friends/{username}")
-    public Response getFriends(@PathParam("username") String username, @Context GraphDatabaseService db) throws IOException {
-        List<String> results = new ArrayList<String>();
-        IndexHits<Node> users = db.index().forNodes("Users").get("username", username);
-        Node user = users.getSingle();
+    @Path("/seed_algolia_orgs")
+    public String seedAlgoliaOrgs(@Context GraphDatabaseService db) {
 
-        for ( Relationship relationship : user.getRelationships(FRIENDS, Direction.OUTGOING) ){
-            Node friend = relationship.getEndNode();
-            results.add((String)friend.getProperty("username"));
-        }
-
-        return Response.ok().entity(objectMapper.writeValueAsString(results)).build();
-    }
-
-    @GET
-    @Path("/fofs/{username}")
-    public Response getFofs(@PathParam("username") String username, @Context GraphDatabaseService db) throws IOException {
-        List<Map<String, Object>> results = new ArrayList<Map<String, Object>>();
-
-        HashMap<Node, AtomicInteger> fofs = new HashMap<Node, AtomicInteger>();
-
-        IndexHits<Node> users = db.index().forNodes("Users").get("username", username);
-        Node user = users.getSingle();
-
-        findFofs(fofs, user);
-        List<Entry<Node, AtomicInteger>> fofList = orderFofs(fofs);
-        returnFofs(results, fofList.subList(0, Math.min(fofList.size(), 10)));
-
-        return Response.ok().entity(objectMapper.writeValueAsString(results)).build();
-    }
-
-    private void findFofs(HashMap<Node, AtomicInteger> fofs, Node user) {
-        List<Node> friends = new ArrayList<Node>();
-
-        if (user != null){
-            for ( Relationship relationship : user.getRelationships(FRIENDS, Direction.BOTH) ){
-                Node friend = relationship.getOtherNode(user);
-                friends.add(friend);
+        Index index = client.initIndex("organization_development");
+        List<JSONObject> algolia_objects = new ArrayList<JSONObject>();
+        for ( Node org : node_auto_index.get("type", "Organization")){
+            String[] market_names = {};
+            String market_names_flat, location = "";
+            Integer n_relationships;
+            Relationship[] markets;
+            markets  = org.getRelationships("organization_in_market");
+            location = org.getRelationships("has_headquarters").getEndNode.full_name;
+            for ( Relationship market : markets ) {
+                market_names.add( market.getEndNode.name );
             }
 
-            for ( Node friend : friends ){
-                for (Relationship otherRelationship : friend.getRelationships(FRIENDS, Direction.BOTH) ){
-                    Node fof = otherRelationship.getOtherNode(friend);
-                    if (!user.equals(fof) && !friends.contains(fof)) {
-                        AtomicInteger atomicInteger = fofs.get(fof);
-                        if (atomicInteger == null) {
-                            fofs.put(fof, new AtomicInteger(1));
-                        } else {
-                            atomicInteger.incrementAndGet();
-                        }
-                    }
-                }
+            for ( String str : market_names) market_names_flat = market_names_flat + ", " + str;
+
+            n_relationships = Array.getLength(n.getRelationships);
+
+
+            JSONObject[] algolia_obj;
+            algolia_obj.put( "objectId", org.uuid );
+            algolia_obj.put( "type", org.type );
+            algolia_obj.put( "name", org.name );
+            algolia_obj.put( "logo_url", org.image_id );
+            algolia_obj.put( "markets", market_names_flat );
+            algolia_obj.put( "description", org.description);
+            algolia_obj.put( "primary_role", org.primary_role);
+            algolia_obj.put( "location", location);
+            algolia_obj.put( "homepage", org.homepage_url);
+            algolia_obj.put( "n_relationships", n_relationships );
+
+            algolia_objects.add(algolia_obj);
+
+            if (algolia_objects.size() == 1000) {
+                index.saveObjects(algolia_objects);
+                algolia_objects.clear();
+            }
+            if (!algolia_objects.isEmpty()){
+                index.saveObjects(algolia_objects);
             }
         }
-    }
-    private List<Entry<Node, AtomicInteger>> orderFofs(HashMap<Node, AtomicInteger> fofs) {
-        List<Entry<Node, AtomicInteger>> fofList = new ArrayList<Entry<Node, AtomicInteger>>(fofs.entrySet());
-        Collections.sort(fofList, new Comparator<Entry<Node, AtomicInteger>>() {
-            @Override
-            public int compare(Entry<Node, AtomicInteger> a,
-                               Entry<Node, AtomicInteger> b) {
-                return ( b.getValue().get() - a.getValue().get() );
 
-            }
-        });
-        return fofList;
+        return "Seeded Algolia Organizations";
     }
 
-    private void returnFofs(List<Map<String, Object>> results, List<Entry<Node, AtomicInteger>> fofList) {
-        Map<String, Object> resultsEntry;
-        Map<String, Object> fofEntry;
-        Node fof;
-        for (Entry<Node, AtomicInteger> entry : fofList) {
-            resultsEntry = new HashMap<String, Object>();
-            fofEntry = new HashMap<String, Object>();
-            fof = entry.getKey();
-
-            for (String prop : fof.getPropertyKeys()) {
-                fofEntry.put(prop, fof.getProperty(prop));
-            }
-
-            resultsEntry.put("fof", fofEntry);
-            resultsEntry.put("friend_count", entry.getValue());
-            results.add(resultsEntry);
-        }
-    }
 }
