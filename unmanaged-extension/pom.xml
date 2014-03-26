@@ -12,6 +12,14 @@
         <neo4j.version>1.9.6</neo4j.version>
     </properties>
 
+    <repositories>
+        <repository>
+            <id>algoliasearch</id>
+            <name>Algolia Search Client</name>
+            <url>https://raw.github.com/algolia/algoliasearch-client-java/master/repository</url>
+        </repository>
+    </repositories>
+
     <dependencies>
         <dependency>
             <groupId>org.neo4j</groupId>
@@ -55,10 +63,5 @@
             <artifactId>algoliasearch</artifactId>
             <version>[1.1.11,]</version>
         </dependency>
-        <repository>
-            <id>algoliasearch</id>
-            <name>Algolia Search Client</name>
-            <url>https://raw.github.com/algolia/algoliasearch-client-java/master/repository</url>
-        </repository>
     </dependencies>
 </project>
