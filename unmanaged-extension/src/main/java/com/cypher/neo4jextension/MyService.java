@@ -1,29 +1,33 @@
 package com.cypher.neo4jextension;
 
+import com.algolia.search.saas.APIClient;
+import com.algolia.search.saas.AlgoliaException;
+import com.algolia.search.saas.Index;
+import org.json.JSONException;
 import org.json.JSONObject;
 import org.neo4j.graphdb.*;
-import org.neo4j.graphdb.Node;
 import org.neo4j.graphdb.index.ReadableIndex;
 import org.neo4j.tooling.GlobalGraphOperations;
-
-import javax.ws.rs.GET;
-import javax.ws.rs.Path;
-import javax.ws.rs.core.Context;
-import java.util.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-
-import com.algolia.search.saas.*;
-
+import javax.ws.rs.GET;
+import javax.ws.rs.Path;
+import javax.ws.rs.PathParam;
+import javax.ws.rs.core.Context;
+import javax.ws.rs.core.Response;
+import java.util.HashMap;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
 
 
 
 @Path("/import_helper")
 public class MyService {
-    APIClient client = new APIClient("A0EF2HAQR0", "906b9d732ffa5e9e32bbf7e6008ba6d3");
+    APIClient client = new APIClient("API_ID", "API_KEY");
     private static Logger logger = LoggerFactory.getLogger(MyService.class);
-    String env = "test";
+    String env = System.getenv("RAILS_ENV");
 
     public enum OrgRelationshipTypes implements RelationshipType
     {
@@ -112,8 +116,188 @@ public class MyService {
     }
 
     @GET
+    @Path("/related_nodes/{uuid}/{relation}/{direction}")
+    public Response relatedNodes(@PathParam("uuid") String uuid, @PathParam("relation") String relation, @PathParam("direction") String direction, @Context GraphDatabaseService db) throws JSONException {
+        logger.info("we made it to related nodes!");
+        ReadableIndex<Node> nodeAutoIndex = db.index().getNodeAutoIndexer().getAutoIndex();
+        Node entity = nodeAutoIndex.get("uuid", uuid).getSingle();
+        RelationshipType relation_type = DynamicRelationshipType.withName(relation);
+        Iterable<Relationship> relationships;
+        JSONObject return_json = new JSONObject();
+        Direction direction_obj = Direction.OUTGOING;
+        if (direction.equals("outgoing")) {
+            direction_obj = Direction.OUTGOING;
+        } else if (direction.equals("incoming")) {
+            direction_obj = Direction.INCOMING;
+        } else if (direction.equals("both")) {
+            direction_obj = Direction.BOTH;
+        }
+        if (entity.hasRelationship(relation_type)){
+            relationships = entity.getRelationships(relation_type, direction_obj);
+            for (Relationship relationship : relationships){
+                logger.info("in loop");
+                Map rel_map = return_rel_map(relationship);
+                Map node_map = return_node_map(relationship.getOtherNode(entity));
+                return_json.append("data", rel_map);
+                return_json.append("data", node_map);
+            }
+            logger.info("JSON: " + return_json.toString());
+            return Response.ok().entity(return_json.toString()).build();
+        } else {
+            return Response.noContent().build();
+        }
+    }
+
+    private Map<String, Object> return_node_map(Node node){
+        Map<String, Object> node_map = new HashMap<String, Object>();
+        for (String prop : node.getPropertyKeys()){
+            node_map.put(prop, node.getProperty(prop));
+        }
+        return node_map;
+    }
+
+    private Map<String, Object> return_rel_map(Relationship rel){
+        Map<String, Object> rel_map = new HashMap<String, Object>();
+        for (String prop : rel.getPropertyKeys()){
+            rel_map.put(prop, rel.getProperty(prop));
+        }
+        return rel_map;
+    }
+
+    @GET
+    @Path("/seed_algolia_markets")
+    public String seedAlgoliaMarkets(@Context GraphDatabaseService db) {
+        if (env == null) env = "test";
+        logger.info("Total Memory: " +  Runtime.getRuntime().totalMemory());
+        logger.info("Max Memory: " +  Runtime.getRuntime().maxMemory());
+        logger.info("Available Memory: " +  Runtime.getRuntime().freeMemory());
+        logger.info("Available CPUs: " +  Runtime.getRuntime().availableProcessors());
+        ReadableIndex<Node> nodeAutoIndex = db.index().getNodeAutoIndexer().getAutoIndex();
+        Index market_index            = client.initIndex("market_" + env);
+        List<JSONObject> algolia_objects           = new LinkedList<JSONObject>();
+        for ( Node market : nodeAutoIndex.get("type", "Market")){
+            Integer n_relationships = 0;
+            for (Relationship r : market.getRelationships()) n_relationships++;
+
+            JSONObject algolia_obj = new JSONObject();
+            try {
+                algolia_obj.put("objectID", market.getProperty("uuid"));
+                algolia_obj.put("type", market.getProperty("type"));
+                algolia_obj.put("name", market.getProperty("name"));
+                algolia_obj.put("n_relationships", n_relationships);
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+
+            algolia_objects.add(algolia_obj);
+
+            if (algolia_objects.size() == 1000) {
+                logger.info("Available Memory: " +  Runtime.getRuntime().freeMemory());
+            }
+
+            if (algolia_objects.size() == 10000 ) {
+                try {
+                    market_index.saveObjects(algolia_objects);
+                } catch (AlgoliaException e){
+                    e.printStackTrace();
+                }
+                algolia_objects.clear();
+            }
+        }
+        try {
+            market_index.saveObjects(algolia_objects);
+        } catch (AlgoliaException e){
+            e.printStackTrace();
+        }
+
+        return "Seeded Algolia Markets";
+    }
+
+    @GET
+    @Path("/seed_algolia_locations")
+    public String seedAlgoliaLocations(@Context GraphDatabaseService db) {
+        if (env == null) env = "test";
+        logger.info("Total Memory: " +  Runtime.getRuntime().totalMemory());
+        logger.info("Max Memory: " +  Runtime.getRuntime().maxMemory());
+        logger.info("Available Memory: " +  Runtime.getRuntime().freeMemory());
+        logger.info("Available CPUs: " +  Runtime.getRuntime().availableProcessors());
+        ReadableIndex<Node> nodeAutoIndex = db.index().getNodeAutoIndexer().getAutoIndex();
+        Index location_index            = client.initIndex("location_" + env);
+        List<JSONObject> algolia_objects           = new LinkedList<JSONObject>();
+        for ( Node location : nodeAutoIndex.get("type", "Location")){
+            String parent_name, parent_type, parent_code2, parent_code3, super_parent_name, super_parent_type, super_parent_code3;
+            parent_name = parent_type = parent_code2 = parent_code3 = super_parent_name = super_parent_type = super_parent_code3  = null;
+
+            Integer n_relationships = 0;
+            for (Relationship r : location.getRelationships()) n_relationships++;
+
+            // first we get the parent location name, type and code
+            if (location.hasRelationship(LocationRelationshipTypes.has_parent_location, Direction.OUTGOING)){
+                Node parent_location = location.getSingleRelationship(LocationRelationshipTypes.has_parent_location, Direction.OUTGOING).getEndNode();
+                parent_name = (String) parent_location.getProperty("name");
+                parent_type = (String) parent_location.getProperty("location_type");
+                if (parent_location.hasProperty("location_code2")) parent_code2 = (String) parent_location.getProperty("location_code2");
+                if (parent_location.hasProperty("location_code3")) parent_code3 = (String) parent_location.getProperty("location_code3");
+                // next we get any super parent data that might exist as well
+                if (parent_location.hasRelationship(LocationRelationshipTypes.has_parent_location, Direction.OUTGOING)){
+                    Node super_parent = parent_location.getSingleRelationship(LocationRelationshipTypes.has_parent_location, Direction.OUTGOING).getEndNode();
+                    super_parent_name = (String) super_parent.getProperty("name");
+                    super_parent_type = (String) super_parent.getProperty("location_type");
+                    if (parent_location.hasProperty("location_code3")) super_parent_code3 = (String) super_parent.getProperty("location_code3");
+                }
+            }
+
+            JSONObject algolia_obj = new JSONObject();
+            try {
+                algolia_obj.put("objectID", location.getProperty("uuid"));
+                algolia_obj.put("type", location.getProperty("type"));
+                algolia_obj.put("name", location.getProperty("name"));
+                algolia_obj.put("location_type", location.getProperty("location_type"));
+                if (location.hasProperty("location_code2")) algolia_obj.put("code2", location.getProperty("location_code2"));
+                if (location.hasProperty("location_code3")) algolia_obj.put("code3", location.getProperty("location_code3"));
+                algolia_obj.put("n_relationships", n_relationships);
+                // parent props
+                if (parent_name != null) algolia_obj.put("parent_name", parent_name);
+                if (parent_type != null) algolia_obj.put("parent_type", parent_type);
+                if (parent_code2 != null) algolia_obj.put("parent_name", parent_code2);
+                if (parent_code3 != null) algolia_obj.put("parent_type", parent_code3);
+                // super parent props
+                if (super_parent_name != null) algolia_obj.put("super_parent_name", super_parent_name);
+                if (super_parent_type != null) algolia_obj.put("super_parent_type", super_parent_type);
+                if (super_parent_code3 != null) algolia_obj.put("super_parent_code3", super_parent_code3);
+
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+
+            algolia_objects.add(algolia_obj);
+
+            if (algolia_objects.size() == 1000) {
+                logger.info("Available Memory: " +  Runtime.getRuntime().freeMemory());
+            }
+
+            if (algolia_objects.size() == 10000 ) {
+                try {
+                    location_index.saveObjects(algolia_objects);
+                } catch (AlgoliaException e){
+                    e.printStackTrace();
+                }
+                algolia_objects.clear();
+            }
+        }
+        try {
+            location_index.saveObjects(algolia_objects);
+        } catch (AlgoliaException e){
+            e.printStackTrace();
+        }
+
+        return "Seeded Algolia Markets";
+    }
+
+    @GET
     @Path("/seed_algolia_orgs")
     public String seedAlgoliaOrgs(@Context GraphDatabaseService db) {
+        if (env == null) env = "test";
         logger.info("Total Memory: " +  Runtime.getRuntime().totalMemory());
         logger.info("Max Memory: " +  Runtime.getRuntime().maxMemory());
         logger.info("Available Memory: " +  Runtime.getRuntime().freeMemory());
@@ -191,7 +375,6 @@ public class MyService {
             }
 
             if (algolia_objects.size() == 10000 ) {
-                //System.out.println("We are about to batch 1000");
                 try {
                     main_index.saveObjects(algolia_objects);
                     organization_index.saveObjects(algolia_objects);
@@ -218,8 +401,9 @@ public class MyService {
     }
 
     @GET
-         @Path("/seed_algolia_people")
-         public String seedAlgoliaPeople(@Context GraphDatabaseService db) {
+    @Path("/seed_algolia_people")
+    public String seedAlgoliaPeople(@Context GraphDatabaseService db) {
+        if (env == null) env = "test";
         logger.info("Total Memory: " +  Runtime.getRuntime().totalMemory());
         logger.info("Max Memory: " +  Runtime.getRuntime().maxMemory());
         logger.info("Available Memory: " +  Runtime.getRuntime().freeMemory());
@@ -328,6 +512,7 @@ public class MyService {
     @GET
     @Path("/seed_algolia_products")
     public String seedAlgoliaProducts(@Context GraphDatabaseService db) {
+        if (env == null) env = "test";
         logger.info("Total Memory: " +  Runtime.getRuntime().totalMemory());
         logger.info("Max Memory: " +  Runtime.getRuntime().maxMemory());
         logger.info("Available Memory: " +  Runtime.getRuntime().freeMemory());
