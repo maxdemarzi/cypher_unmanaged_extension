@@ -9,8 +9,16 @@
     <version>1.0</version>
 
     <properties>
-        <neo4j.version>1.9.4</neo4j.version>
+        <neo4j.version>1.9.6</neo4j.version>
     </properties>
+
+    <repositories>
+        <repository>
+            <id>algoliasearch</id>
+            <name>Algolia Search Client</name>
+            <url>https://raw.github.com/algolia/algoliasearch-client-java/master/repository</url>
+        </repository>
+    </repositories>
 
     <dependencies>
         <dependency>
@@ -50,6 +58,10 @@
             <artifactId>jersey-client</artifactId>
             <version>1.9</version>
         </dependency>
+        <dependency>
+            <groupId>com.algolia</groupId>
+            <artifactId>algoliasearch</artifactId>
+            <version>[1.1.11,]</version>
+        </dependency>
     </dependencies>
-    
 </project>
